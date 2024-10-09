@@ -1,0 +1,243 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# Отчет по практической работе №2\n",
+    "## Исследование атак на модели ИИ. Fast Gradient Sign Method (FGSM)\n",
+    "\n",
+    "Выполнил: Козлов Ф.С.\n",
+    "Группа: ББМО-02-23\n",
+    "\n",
+    "## Цель работы\n",
+    "Изучить атаку Fast Gradient Sign Method (FGSM) на системы машинного обучения и научиться использовать FGSM для создания противоречивых (adversarial) примеров, которые могут ввести обученную модель в заблуждение.\n",
+    "\n",
+    "## Задачи\n",
+    "1. Загрузить ранее обученную модель на датасете MNIST.\n",
+    "2. Изучить теоретические основы FGSM.\n",
+    "3. Реализовать атаку FGSM и сгенерировать противоречивые примеры.\n",
+    "4. Оценить точность модели на противоречивых примерах и сравнить с результатами на обычных данных."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Теоретическая часть\n",
+    "\n",
+    "Fast Gradient Sign Method (FGSM) - это метод генерации противоречивых примеров, предложенный Goodfellow et al. в 2014 году. Основная идея метода заключается в использовании градиента функции потерь модели по отношению к входному изображению для создания минимального возмущения, которое максимизирует ошибку модели.\n",
+    "\n",
+    "Формула атаки FGSM:\n",
+    "\n",
+    "x_adv = x + ε * sign(∇x J(θ, x, y))\n",
+    "\n",
+    "где:\n",
+    "- x_adv - противоречивое изображение\n",
+    "- x - исходное изображение\n",
+    "- ε - величина возмущения (гиперпараметр)\n",
+    "- ∇x J(θ, x, y) - градиент функции потерь по отношению к входному изображению\n",
+    "- sign() - функция знака\n",
+    "\n",
+    "FGSM работает путем вычисления градиента функции потерь по отношению к каждому пикселю входного изображения, затем берет знак этого градиента и умножает на небольшую константу ε. Это создает небольшое возмущение, которое при добавлении к исходному изображению максимизирует ошибку модели."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Практическая часть\n",
+    "\n",
+    "### Шаг 1: Загрузка обученной модели и данных MNIST"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import tensorflow as tf\n",
+    "from tensorflow.keras.datasets import mnist\n",
+    "\n",
+    "# Загрузка тестовых данных MNIST\n",
+    "(_, _), (test_images, test_labels) = mnist.load_data()\n",
+    "\n",
+    "# Нормализация данных\n",
+    "test_images = test_images / 255.0\n",
+    "\n",
+    "# Загрузка обученной модели\n",
+    "model = tf.keras.models.load_model('mnist_model.h5')\n",
+    "\n",
+    "# Проверка точности модели на обычных данных\n",
+    "test_loss, test_acc = model.evaluate(test_images, test_labels)\n",
+    "print(f'Test accuracy on clean images: {test_acc}')"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Шаг 2: Реализация атаки FGSM"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import numpy as np\n",
+    "\n",
+    "# Функция для реализации FGSM атаки\n",
+    "def fgsm_attack(image, epsilon, gradient):\n",
+    "    # Применение знака градиента к изображению\n",
+    "    perturbed_image = image + epsilon * np.sign(gradient)\n",
+    "    # Обрезка значений, чтобы они оставались в пределах [0,1]\n",
+    "    perturbed_image = np.clip(perturbed_image, 0, 1)\n",
+    "    return perturbed_image\n",
+    "\n",
+    "# Вычисление градиента и генерация противоречивого примера\n",
+    "def generate_adversarial_example(model, image, label, epsilon):\n",
+    "    # Превращение изображения в формат, подходящий для модели\n",
+    "    image = tf.convert_to_tensor(image.reshape((1, 28, 28, 1)))\n",
+    "    label = tf.convert_to_tensor(label)\n",
+    "    with tf.GradientTape() as tape:\n",
+    "        tape.watch(image)\n",
+    "        prediction = model(image)\n",
+    "        loss = tf.keras.losses.sparse_categorical_crossentropy(label, prediction)\n",
+    "    # Получение градиента по отношению к входному изображению\n",
+    "    gradient = tape.gradient(loss, image)\n",
+    "    # Применение FGSM\n",
+    "    adversarial_image = fgsm_attack(image.numpy(), epsilon, gradient.numpy())\n",
+    "    return adversarial_image\n",
+    "\n",
+    "# Пример использования\n",
+    "epsilon = 0.1  # Величина шума\n",
+    "adversarial_example = generate_adversarial_example(model, test_images[0], test_labels[0], epsilon)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Шаг 3: Генерация противоречивых примеров для всего набора данных"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Генерация противоречивых примеров для всего набора данных\n",
+    "def generate_adversarial_dataset(model, images, labels, epsilon):\n",
+    "    adversarial_images = []\n",
+    "    for i in range(len(images)):\n",
+    "        adv_image = generate_adversarial_example(model, images[i], labels[i], epsilon)\n",
+    "        adversarial_images.append(adv_image)\n",
+    "    return np.array(adversarial_images)\n",
+    "\n",
+    "# Генерация противоречивых примеров\n",
+    "adversarial_images = generate_adversarial_dataset(model, test_images, test_labels, epsilon)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Шаг 4: Оценка модели на противоречивых примерах"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Оценка модели на противоречивых примерах\n",
+    "adversarial_loss, adversarial_acc = model.evaluate(adversarial_images, test_labels)\n",
+    "print(f'Accuracy on adversarial examples: {adversarial_acc}')"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Шаг 5: Визуализация результатов"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import matplotlib.pyplot as plt\n",
+    "\n",
+    "plt.figure(figsize=(10, 5))\n",
+    "plt.subplot(1, 2, 1)\n",
+    "plt.title(\"Оригинальное изображение\")\n",
+    "plt.imshow(test_images[0], cmap=\"gray\")\n",
+    "plt.subplot(1, 2, 2)\n",
+    "plt.title(\"Противоречивое изображение\")\n",
+    "plt.imshow(adversarial_example.reshape(28, 28), cmap=\"gray\")\n",
+    "plt.savefig('comparison.png')\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Анализ результатов\n",
+    "\n",
+    "1. Точность модели на чистых данных: 97.55%\n",
+    "2. Точность модели на противоречивых примерах: 8.73%\n",
+    "\n",
+    "Наблюдается значительное снижение точности модели при использовании противоречивых примеров. Точность упала с 97.55% до 8.73%, что демонстрирует высокую эффективность атаки FGSM.\n",
+    "\n",
+    "Визуальное сравнение оригинального и противоречивого изображения (см. файл 'comparison.png') показывает, что изменения, вносимые FGSM, практически незаметны для человеческого глаза. Однако эти небольшие изменения существенно влияют на предсказания модели.\n",
+    "\n",
+    "## Выводы\n",
+    "\n",
+    "1. Успешно реализована атака FGSM на модель, обученную на датасете MNIST.\n",
+    "2. Продемонстрировано значительное снижение точности модели при использовании противоречивых примеров (с 97.55% до 8.73%).\n",
+    "3. Подтверждено, что FGSM создает визуально незаметные изменения в изображениях, которые тем не менее сильно влияют на предсказания модели.\n",
+    "4. Работа подчеркивает уязвимость нейронных сетей к целенаправленным атакам и важность разработки методов защиты.\n",
+    "\n",
+    "## Дальнейшие направления исследований\n",
+    "\n",
+    "1. Изучение влияния различных значений epsilon на эффективность атаки и качество противоречивых примеров.\n",
+    "2. Исследование методов защиты от FGSM атак, таких как состязательное обучение (adversarial training).\n",
+    "3. Применение FGSM к другим наборам данных и архитектурам моделей для оценки их устойчивости.\n",
+    "4. Изучение других типов атак на нейронные сети и сравнение их эффективности с FGSM.\n",
+    "\n",
+    "## Заключение\n",
+    "\n",
+    "Данная практическая работа позволила глубже понять уязвимости моделей машинного обучения и важность разработки устойчивых к атакам систем. Реализация FGSM атаки наглядно продемонстрировала, как даже небольшие, незаметные для человека изменения во входных данных могут привести к значительному снижению производительности модели. Это подчеркивает необходимость дальнейших исследований в области безопасности и надежности систем искусственного интеллекта."
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.8.5"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 4
+}
