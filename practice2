@@ -36,7 +36,8 @@ FGSM работает путем вычисления градиента фун�
 
 ### Шаг 1: Загрузка обученной модели и данных MNIST
 
-```python
+```
+python
 import tensorflow as tf
 from tensorflow.keras.datasets import mnist
 
